@@ -7,3 +7,175 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Color {
+  BLACK
+  RED
+  WHITE
+}
+
+enum StrategyType {
+  COLOR_NORMAL
+  WHITE_DEFENSE
+}
+
+enum GaleRule {
+  FOLLOW_LAST_COLOR
+}
+
+enum SignalStatus {
+  WAITING_ENTRY
+  WAITING_GALE
+  WAITING_WHITE_DEFENSE
+  WIN
+  WIN_GALE
+  LOSS
+  WIN_WHITE
+  LOSS_WHITE
+  CANCELLED
+}
+
+enum SignalStepType {
+  ENTRY
+  GALE
+  WHITE_DEFENSE
+}
+
+model Strategy {
+  id       String       @id @default(cuid())
+  name     String
+  type     StrategyType
+  sequence Color[]
+  entry    Color
+  active   Boolean      @default(true)
+
+  maxGales Int      @default(0)
+  galeRule GaleRule?
+
+  entryUnits     Decimal @default(1)
+  galeMultiplier Decimal @default(2)
+
+  whiteDefenseRounds Int?
+  whiteEntryUnits     Decimal?
+  whitePayoutMultiplier Decimal?
+  stopWhiteOnWin      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  signals Signal[]
+  backtests Backtest[]
+}
+
+model Round {
+  id String @id @default(cuid())
+
+  externalId String?
+  provider   String
+
+  number Int
+  color  Color
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  triggeredSignals Signal[]
+  signalSteps SignalStep[]
+
+  @@unique([provider, externalId])
+  @@index([occurredAt])
+}
+
+model Signal {
+  id String @id @default(cuid())
+
+  strategyId   String
+  triggerRoundId String
+
+  initialEntry Color
+  status       SignalStatus
+
+  currentStep Int @default(0)
+  maxSteps    Int @default(1)
+
+  unitsResult Decimal @default(0)
+
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  strategy     Strategy @relation(fields: [strategyId], references: [id])
+  triggerRound Round    @relation(fields: [triggerRoundId], references: [id])
+
+  steps SignalStep[]
+
+  @@unique([strategyId, triggerRoundId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model SignalStep {
+  id String @id @default(cuid())
+
+  signalId String
+  roundId  String?
+
+  stepNumber Int
+  type       SignalStepType
+
+  entryColor  Color
+  resultColor Color?
+
+  unitsBet    Decimal
+  unitsResult Decimal @default(0)
+
+  createdAt DateTime @default(now())
+
+  signal Signal @relation(fields: [signalId], references: [id])
+  round  Round? @relation(fields: [roundId], references: [id])
+
+  @@unique([signalId, stepNumber])
+  @@index([signalId])
+  @@index([roundId])
+}
+
+model Backtest {
+  id String @id @default(cuid())
+
+  strategyId String
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  roundsAnalyzed Int
+  signalsFound   Int
+
+  directWins Int
+  galeWins   Int
+  losses     Int
+
+  winRate      Decimal
+  unitsResult  Decimal
+  maxDrawdown  Decimal
+  maxLossStreak Int
+
+  createdAt DateTime @default(now())
+
+  strategy Strategy @relation(fields: [strategyId], references: [id])
+
+  @@index([strategyId])
+  @@index([createdAt])
+}
+
+model Setting {
+  id String @id @default(cuid())
+
+  key   String @unique
+  value Json
+
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
